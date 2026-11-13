@@ -10,6 +10,7 @@ Adds a **Base Camera FoV** slider (`50`–`120`) and a **Sprinting Increases FoV
 
 **2.0.0**
 - Updated for modern *Risk of Rain 2* camera internals (`CameraTargetParams` & `CameraModePlayerBasic`) so standalone compatibility patches are no longer required.
+- Eliminated the brief FoV dip/spike when starting or stopping a sprint.
 - Migrated settings UI to **Risk Of Options** and standard BepInEx configuration (`Quizzik.AddFoVSettings.cfg`).
 - Removed legacy `R2API` and `HookGenPatcher` dependencies.
 
