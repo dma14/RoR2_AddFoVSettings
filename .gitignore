@@ -328,3 +328,9 @@ ASALocalRun/
 
 # MFractors (Xamarin productivity tool) working folder 
 .mfractor/
+
+# Built Thunderstore package artifacts
+Thunderstore_Package/*.dll
+Thunderstore_Package/*.zip
+Thunderstore_Package/*.deps.json
+

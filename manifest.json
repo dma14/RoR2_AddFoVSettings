@@ -1,10 +1,10 @@
 ﻿{
-	"name": "MyFirstMod",
-	"version_number": "1.0.0",
-	"website_url": "",
-	"description": "My first Mod",
-	"dependencies": [
-		"bbepis-BepInExPack-5.4.9",
-		"RiskofThunder-HookGenPatcher-1.2.1"
-	]
+  "name": "AddFoVSettings",
+  "version_number": "2.0.0",
+  "website_url": "https://github.com/dma14/RoR2_AddFoVSettings",
+  "description": "Adds a Base Camera FoV slider and a Sprinting Increases FoV toggle via Risk Of Options.",
+  "dependencies": [
+    "bbepis-BepInExPack-5.4.2122",
+    "Rune580-Risk_Of_Options-2.8.6"
+  ]
 }

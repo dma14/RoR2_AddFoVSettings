@@ -1,67 +1,124 @@
+using System.IO;
+using System.Runtime.CompilerServices;
 using BepInEx;
-using RoR2;
+using BepInEx.Bootstrap;
+using BepInEx.Configuration;
+using HarmonyLib;
+using RiskOfOptions;
+using RiskOfOptions.OptionConfigs;
+using RiskOfOptions.Options;
+using UnityEngine;
 
 namespace AddFoVSettings
 {
-    //This attribute specifies that we have a dependency on R2API, as we're using it to add our item to the game.
-    //You don't need this if you're not using R2API in your plugin, it's just to tell BepInEx to initialize R2API before this plugin so it's safe to use R2API.
-    [BepInDependency(R2API.R2API.PluginGUID)]
-
-    //This attribute is required, and lists metadata for your plugin.
+    [BepInDependency(RiskOfOptionsGuid, BepInDependency.DependencyFlags.SoftDependency)]
     [BepInPlugin(PluginGUID, PluginName, PluginVersion)]
-
     public class AddFoVSettingsMain : BaseUnityPlugin
     {
-        //The Plugin GUID should be a unique ID for this plugin, which is human readable (as it is used in places like the config).
-        //If we see this PluginGUID as it is on thunderstore, we will deprecate this mod. Change the PluginAuthor and the PluginName !
         public const string PluginGUID = PluginAuthor + "." + PluginName;
         public const string PluginAuthor = "Quizzik";
         public const string PluginName = "AddFoVSettings";
-        public const string PluginVersion = "1.0.0";
+        public const string PluginVersion = "2.0.0";
 
-        // Custom stuff
-        CameraRigController currentCamera;
-        float sprintFoVModifier = 1.0F / 1.3F;
-        MenuSlider FoVSlider;
-        MenuCheckbox sprintFoVEffectsCheckbox;
+        private const string RiskOfOptionsGuid = "com.rune580.riskofoptions";
 
-        //The Awake() method is run at the very start when the game is initialized.
+        internal static ConfigEntry<float> BaseFoV { get; private set; }
+        internal static ConfigEntry<bool> SprintingIncreasesFoV { get; private set; }
+
+        private Harmony _harmony;
+
         public void Awake()
         {
-            //Init our logging class so that we can properly log for debugging
             Log.Init(Logger);
 
-            FoVSlider = new MenuSlider(60, 120, 50, true, "Base Camera FOV", "The base camera FOV to use.", SubPanel.Gameplay);
-            FoVSlider.OnSliderChanged += (newValue) => { if (currentCamera) currentCamera.baseFov = newValue; };
-            sprintFoVEffectsCheckbox = new MenuCheckbox(false, "Sprinting Increases FOV", "Enables an increase in FOV while sprinting.", SubPanel.Gameplay);
+            BaseFoV = Config.Bind(
+                "Camera",
+                "BaseCameraFoV",
+                60f,
+                new ConfigDescription(
+                    "The base camera field of view (vanilla default is 60).",
+                    new AcceptableValueRange<float>(50f, 120f)
+                )
+            );
 
-            On.RoR2.CameraRigController.OnEnable += hook_OnCameraEnable;
+            SprintingIncreasesFoV = Config.Bind(
+                "Camera",
+                "SprintingIncreasesFoV",
+                false,
+                "Enables the vanilla FoV increase while sprinting. Keep disabled to prevent sprint FoV zoom."
+            );
 
-            // This line of log will appear in the bepinex console when the Awake method is done.
-            Log.LogInfo(nameof(Awake) + " done.");
-        }
-        void hook_OnCameraEnable(On.RoR2.CameraRigController.orig_OnEnable orig, CameraRigController self)
-        {
-            orig(self);
-            currentCamera = self;
-            currentCamera.baseFov = FoVSlider.GetValue();
-        }
+            BaseFoV.SettingChanged += (_, _) => CameraFoVPatches.ApplyBaseFoVImmediate();
 
-        //The Update() method is run on every frame of the game.
-        private void Update()
-        {
-            if (RoR2.Run.instance && !sprintFoVEffectsCheckbox.GetValue())
+            _harmony = Harmony.CreateAndPatchAll(typeof(CameraFoVPatches), PluginGUID);
+
+            if (Chainloader.PluginInfos.ContainsKey(RiskOfOptionsGuid))
             {
-                if (currentCamera.cameraModeContext.targetInfo.isSprinting)
-                {
-                    currentCamera.baseFov = FoVSlider.GetValue() * sprintFoVModifier;
-                }
-                else
-                {
-                    currentCamera.baseFov = FoVSlider.GetValue();
-                }
+                RegisterRiskOfOptions();
             }
 
+            Log.LogInfo($"{PluginName} {PluginVersion} initialized (BaseCameraFoV={BaseFoV.Value}, SprintingIncreasesFoV={SprintingIncreasesFoV.Value}).");
+        }
+
+        private void OnDestroy()
+        {
+            _harmony?.UnpatchSelf();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining | MethodImplOptions.NoOptimization)]
+        private void RegisterRiskOfOptions()
+        {
+            ModSettingsManager.SetModDescription("Adjust base camera field of view and toggle sprint FoV scaling.");
+            TryLoadModIcon();
+
+            ModSettingsManager.AddOption(new StepSliderOption(
+                BaseFoV,
+                new StepSliderConfig
+                {
+                    name = "Base Camera FoV",
+                    min = 50f,
+                    max = 120f,
+                    increment = 1f,
+                    FormatString = "{0:0}"
+                }
+            ));
+
+            ModSettingsManager.AddOption(new CheckBoxOption(
+                SprintingIncreasesFoV,
+                new CheckBoxConfig
+                {
+                    name = "Sprinting Increases FoV"
+                }
+            ));
+
+            Log.LogInfo("Registered settings with Risk Of Options.");
+        }
+
+        private void TryLoadModIcon()
+        {
+            string pluginDir = Path.GetDirectoryName(Info.Location);
+            if (string.IsNullOrEmpty(pluginDir))
+            {
+                return;
+            }
+
+            string iconPath = Path.Combine(pluginDir, "icon.png");
+            if (!File.Exists(iconPath))
+            {
+                return;
+            }
+
+            byte[] iconBytes = File.ReadAllBytes(iconPath);
+            Texture2D texture = new Texture2D(256, 256);
+            if (ImageConversion.LoadImage(texture, iconBytes))
+            {
+                Sprite iconSprite = Sprite.Create(
+                    texture,
+                    new Rect(0f, 0f, texture.width, texture.height),
+                    new Vector2(0.5f, 0.5f)
+                );
+                ModSettingsManager.SetModIcon(iconSprite);
+            }
         }
     }
 }
